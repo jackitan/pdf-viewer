@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>在线PDF查看器</title>
+  <title>作品集</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.js"></script>
   <style>
     * {
@@ -18,23 +18,25 @@
     .toolbar {
       background-color: #2563eb;
       color: white;
-      padding: 12px 20px;
+      padding: 12px 16px;
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 8px;
       position: sticky;
       top: 0;
       z-index: 100;
+      flex-wrap: wrap;
     }
     .toolbar button {
       background: rgba(255,255,255,0.2);
       border: none;
       color: white;
-      padding: 6px 12px;
+      padding: 6px 10px;
       border-radius: 4px;
       cursor: pointer;
       font-size: 14px;
       transition: background 0.2s;
+      white-space: nowrap;
     }
     .toolbar button:hover:not(:disabled) {
       background: rgba(255,255,255,0.3);
@@ -46,20 +48,6 @@
     .page-info {
       margin-left: auto;
     }
-    .upload-area {
-      padding: 100px 20px;
-      text-align: center;
-      color: #333;
-    }
-    .upload-area p {
-      margin-top: 12px;
-      color: #666;
-    }
-    .upload-area input {
-      margin-top: 30px;
-      padding: 10px 20px;
-      font-size: 16px;
-    }
     #pdf-container {
       display: flex;
       flex-direction: column;
@@ -70,28 +58,29 @@
     .pdf-page {
       background: white;
       box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      max-width: 100%;
+      height: auto;
     }
-    .hidden {
-      display: none !important;
+    .loading {
+      padding: 100px 20px;
+      text-align: center;
+      color: #666;
     }
   </style>
 </head>
 <body>
-  <div class="toolbar" id="toolbar" class="hidden">
+  <div class="toolbar" id="toolbar">
     <button id="prev-btn">上一页</button>
-    <span class="page-info" id="page-info">1 / 1</span>
+    <span class="page-info" id="page-info">加载中...</span>
     <button id="next-btn">下一页</button>
     <button id="zoom-out">缩小</button>
     <button id="zoom-in">放大</button>
-    <button id="download-btn">下载PDF</button>
+    <button id="download-btn">下载</button>
   </div>
 
-  <div id="upload-area" class="upload-area">
-    <h2>在线PDF查看器</h2>
-    <p>上传你的PDF文件，即可在线查看，文件不会上传到服务器，所有操作在本地完成</p>
-    <input type="file" id="pdf-upload" accept=".pdf" />
+  <div id="loading" class="loading">
+    <h2>正在加载作品集...</h2>
   </div>
-
   <div id="pdf-container"></div>
 
   <script>
@@ -101,34 +90,32 @@
     let pdfDoc = null;
     let currentPage = 1;
     let scale = 1.5;
-    let currentFile = null;
+    let pdfFileName = "tangzhengpeng Portfolio.pdf"; // 已经改成你的PDF文件名
+    let pdfFileBlob = null;
 
-    // 获取页面元素
-    const uploadArea = document.getElementById('upload-area');
+    // 元素
     const toolbar = document.getElementById('toolbar');
     const pdfContainer = document.getElementById('pdf-container');
+    const loading = document.getElementById('loading');
     const pageInfo = document.getElementById('page-info');
     const prevBtn = document.getElementById('prev-btn');
     const nextBtn = document.getElementById('next-btn');
     const zoomInBtn = document.getElementById('zoom-in');
     const zoomOutBtn = document.getElementById('zoom-out');
     const downloadBtn = document.getElementById('download-btn');
-    const uploadInput = document.getElementById('pdf-upload');
 
-    // 监听PDF文件上传
-    uploadInput.addEventListener('change', async function(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-      currentFile = file;
-
-      // 加载本地PDF文件
-      const fileUrl = URL.createObjectURL(file);
+    // 页面加载完成后，自动加载你的PDF
+    window.addEventListener('load', async function() {
       try {
-        pdfDoc = await pdfjsLib.getDocument(fileUrl).promise;
+        // 先下载PDF文件的blob，用于后续下载
+        const response = await fetch(`./${encodeURIComponent(pdfFileName)}`);
+        pdfFileBlob = await response.blob();
         
-        // 切换界面：隐藏上传区，显示工具栏和查看区
-        uploadArea.classList.add('hidden');
-        toolbar.classList.remove('hidden');
+        // 加载PDF到查看器
+        pdfDoc = await pdfjsLib.getDocument(URL.createObjectURL(pdfFileBlob)).promise;
+        
+        // 隐藏加载提示
+        loading.style.display = 'none';
         
         // 初始化页码
         pageInfo.textContent = `1 / ${pdfDoc.numPages}`;
@@ -136,17 +123,17 @@
         // 渲染第一页
         renderPage(currentPage);
       } catch (err) {
-        alert('加载PDF失败，请检查文件是否正确');
+        loading.innerHTML = `<h2>加载PDF失败</h2><p>请确认PDF文件已经上传到仓库，并且文件名正确</p>`;
         console.error('PDF加载错误:', err);
       }
     });
 
-    // 渲染指定页码的PDF页面
+    // 渲染页面
     async function renderPage(num) {
       const page = await pdfDoc.getPage(num);
       const viewport = page.getViewport({ scale: scale });
 
-      // 清空容器，创建新的Canvas
+      // 清空容器，创建Canvas
       pdfContainer.innerHTML = '';
       const canvas = document.createElement('canvas');
       canvas.className = 'pdf-page';
@@ -154,14 +141,14 @@
       canvas.height = viewport.height;
       pdfContainer.appendChild(canvas);
 
-      // 执行渲染
+      // 渲染PDF内容
       const context = canvas.getContext('2d');
       await page.render({
         canvasContext: context,
         viewport: viewport
       }).promise;
 
-      // 更新页码信息
+      // 更新页码
       pageInfo.textContent = `${num} / ${pdfDoc.numPages}`;
       currentPage = num;
 
@@ -170,27 +157,27 @@
       nextBtn.disabled = currentPage >= pdfDoc.numPages;
     }
 
-    // 上一页按钮
+    // 上一页
     prevBtn.addEventListener('click', function() {
       if (currentPage > 1) {
         renderPage(currentPage - 1);
       }
     });
 
-    // 下一页按钮
+    // 下一页
     nextBtn.addEventListener('click', function() {
       if (currentPage < pdfDoc.numPages) {
         renderPage(currentPage + 1);
       }
     });
 
-    // 放大按钮
+    // 放大
     zoomInBtn.addEventListener('click', function() {
       scale += 0.25;
       renderPage(currentPage);
     });
 
-    // 缩小按钮
+    // 缩小
     zoomOutBtn.addEventListener('click', function() {
       if (scale > 0.5) {
         scale -= 0.25;
@@ -198,12 +185,12 @@
       }
     });
 
-    // 下载PDF按钮
+    // 下载PDF：用blob下载，解决带空格/中文文件名的问题
     downloadBtn.addEventListener('click', function() {
-      if (currentFile) {
+      if (pdfFileBlob) {
         const a = document.createElement('a');
-        a.href = URL.createObjectURL(currentFile);
-        a.download = currentFile.name;
+        a.href = URL.createObjectURL(pdfFileBlob);
+        a.download = pdfFileName;
         a.click();
       }
     });
